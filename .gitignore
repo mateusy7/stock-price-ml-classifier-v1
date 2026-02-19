@@ -1,3 +1,4 @@
+deployment
 __pycache__
 venv
-03_model_training.ipynb
+utilities_app.py
