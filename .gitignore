@@ -1,4 +1,4 @@
-deployment
 __pycache__
+deployment/
 venv
-utilities_app.py
+src/
