@@ -1,0 +1,3 @@
+[submodule "classification-model-demo"]
+	path = classification-model-demo
+	url = https://huggingface.co/spaces/mateusy/classification-model-demo
