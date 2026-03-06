@@ -297,8 +297,6 @@ def get_confusion_matrix(y_test, true_col='signal', pred_col='pred'):
     # True Positives: # y_true=1, y_pred=1
     TP = len(positive[positive[pred_col] == 1])
 
-    print(f"Confusion matrix manual implementation         - TN: {TN}, FP: {FP}, FN: {FN}, TP: {TP}, Total Count = {TN+FP+FN+TP}")
-
     return TN, FP, FN, TP
 
 def evaluate_classification_performance(y_poly_test, p, f_wb, 
