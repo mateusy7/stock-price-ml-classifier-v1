@@ -3,7 +3,7 @@ import talib as ta
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-from sklearn.metrics import ConfusionMatrixDisplay
+from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix_at_thresholds, precision_recall_curve, roc_curve, roc_auc_score
 
 def load_ml_data(base_path, folder_name):
     """
@@ -31,6 +31,8 @@ def load_ml_data(base_path, folder_name):
     print(f"X_{file_type}test : {X_test.shape}, y_{file_type}test : {y_test.shape}\n")
     
     return X_train, X_test, y_train, y_test
+
+## Data pre-processing functions
 
 def check_stationarity(series):
     result = adfuller(series)
@@ -208,7 +210,7 @@ def compute_gradient(X, y, w, b, lambda_=0):
 
     return dj_dw, dj_db
 
-def run_gradient_descent(X, y, w_in, b_in, cost_function, gradient_function, alpha, num_iters, lambda_):
+def run_gradient_descent(X, y, w_in, b_in, cost_function, gradient_function, alpha, num_iters, lambda_, display=True):
     """
     Performs batch gradient descent to learn theta. Updates theta by taking 
     num_iters gradient steps with learning rate alpha
@@ -243,17 +245,20 @@ def run_gradient_descent(X, y, w_in, b_in, cost_function, gradient_function, alp
         cost = cost_function(X, y, w, b, lambda_)
         J_history.append(cost)
 
-        # Print cost at intervals 10% of num_iters
-        if i % (num_iters // 10) == 0 or i == (num_iters - 1):
-            print(f"Iteration {i:4}: Cost {float(J_history[-1]):8.5f}")
+        # print cost
+        if display:
+            # Print cost at intervals 10% of num_iters
+            if i % (num_iters // 10) == 0 or i == (num_iters - 1):
+                print(f"Iteration {i:4}: Cost {float(J_history[-1]):8.5f}")
     
-    # Plot the cost J at each iteration
-    plt.figure(figsize=(6,4))
-    plt.plot(J_history)
-    plt.title('Cost over time')
-    plt.xlabel('Iterations')
-    plt.ylabel('Cost')
-    plt.show()
+    if display:
+        # Plot the cost J at each iteration
+        plt.figure(figsize=(6,4))
+        plt.plot(J_history)
+        plt.title('Cost over time')
+        plt.xlabel('Iterations')
+        plt.ylabel('Cost')
+        plt.show()
     
     return w, b
 
@@ -299,91 +304,14 @@ def get_confusion_matrix(y_test, true_col='signal', pred_col='pred'):
 
     return TN, FP, FN, TP
 
-def evaluate_classification_performance(y_poly_test, p, f_wb, 
-                                        confusion_matrix_at_thresholds_f, 
-                                        precision_recall_curve_f, 
-                                        roc_curve_f, 
-                                        roc_auc_score_f,
-                                        title):
-    """
-    Prepares data, calculates manual metrics, and plots a 2x2 performance dashboard.
-    """
+def evaluate_classification_performance(y_test, p, f_wb, threshold, title):
     # --- 1. Data Preparation ---
-    y_poly_test['pred'] = p.reshape((-1, 1))
-    y_true = y_poly_test['signal']
-    y_prob = f_wb
-
-    # --- 2. Metric Calculation & Console Output ---
-    # Using your existing get_confusion_matrix function
-    TN, FP, FN, TP = get_confusion_matrix(y_poly_test)
-
-    # Detailed classification metrics
-    TPR = TP / (TP + FN) if (TP + FN) > 0 else 0  # Sensitivity/Recall
-    TNR = TN / (TN + FP) if (TN + FP) > 0 else 0  # Specificity
-    NPV = TN / (TN + FN) if (TN + FN) > 0 else 0  # Negative Predictive Value
-    precision = TP / (TP + FP) if (TP + FP) > 0 else 0 
-
-    print(f"TPR: {TPR:0.3f}, TNR: {TNR:0.3f}")
-    print(f"Precision: {precision:0.3f}, NPV: {NPV:0.3f}")
-
-    # --- 3. Plotting Setup (2x2 Grid) ---
-    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-    plt.subplots_adjust(hspace=0.3, wspace=0.3)
-
-    # Plot 1: Confusion Matrix (Top Left)
-    axes[0, 0].set_title("Confusion Matrix")
-    ConfusionMatrixDisplay.from_predictions(y_true, y_poly_test['pred'], ax=axes[0, 0], cmap='Blues')
-
-    # Plot 2: Counts vs Thresholds (Top Right)
-    tns, fps, fns, tps, thresholds_m = confusion_matrix_at_thresholds_f(y_true, y_prob)
-    axes[0, 1].plot(thresholds_m, tns, label="TN")
-    axes[0, 1].plot(thresholds_m, fps, label="FP")
-    axes[0, 1].plot(thresholds_m, fns, label="FN")
-    axes[0, 1].plot(thresholds_m, tps, label="TP")
-    axes[0, 1].set_title("Counts vs Thresholds")
-    axes[0, 1].set_xlabel("Threshold")
-    axes[0, 1].set_ylabel("Count")
-    axes[0, 1].legend()
-    axes[0, 1].grid(True, alpha=0.3)
-
-    # Plot 3: Precision-Recall vs Threshold (Bottom Left)
-    precisions, recalls, thresholds_pr = precision_recall_curve_f(y_true, y_prob)
-    axes[1, 0].plot(thresholds_pr, precisions[:-1], 'b--', label='Precision')
-    axes[1, 0].plot(thresholds_pr, recalls[:-1], 'g-', label='Recall')
-    axes[1, 0].set_title("Precision-Recall vs Threshold")
-    axes[1, 0].set_xlabel("Threshold")
-    axes[1, 0].set_ylabel("Score")
-    axes[1, 0].legend()
-    axes[1, 0].grid(True, alpha=0.3)
-
-    # Plot 4: ROC Curve (Bottom Right)
-    fpr, tpr, _ = roc_curve_f(y_true, y_prob)
-    auc_score = roc_auc_score_f(y_true, y_prob)
-    axes[1, 1].plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC (AUC = {auc_score:0.3f})')
-    axes[1, 1].plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--', label='Random Classifier')
-    axes[1, 1].set_title(f"ROC Curve (AUC: {auc_score:0.3f})")
-    axes[1, 1].set_xlabel("False Positive Rate")
-    axes[1, 1].set_ylabel("True Positive Rate")
-    axes[1, 1].legend(loc="lower right")
-    axes[1, 1].grid(True, alpha=0.3)
-
-    fig.suptitle(title)
-
-    plt.show()
-
-def evaluate_classification_performance_2(y_poly_test, p, f_wb, 
-                                        confusion_matrix_at_thresholds_f, 
-                                        precision_recall_curve_f, 
-                                        roc_curve_f, 
-                                        roc_auc_score_f,
-                                        title):
-    # --- 1. Data Preparation ---
-    y_poly_test['pred'] = p.reshape((-1, 1))
-    y_true = y_poly_test['signal']
+    y_test['pred'] = p.reshape((-1, 1))
+    y_true = y_test['signal']
     y_prob = f_wb
 
     # --- 2. Metric Calculation ---
-    TN, FP, FN, TP = get_confusion_matrix(y_poly_test)
+    TN, FP, FN, TP = get_confusion_matrix(y_test)
 
     TPR = TP / (TP + FN) if (TP + FN) > 0 else 0
     TNR = TN / (TN + FP) if (TN + FP) > 0 else 0
@@ -391,48 +319,48 @@ def evaluate_classification_performance_2(y_poly_test, p, f_wb,
     precision = TP / (TP + FP) if (TP + FP) > 0 else 0 
 
     # --- 3. Plotting Setup ---
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    plt.subplots_adjust(hspace=0.3, wspace=0.4) # Space for metrics and labels
+    fig, axes = plt.subplots(2, 2, figsize=(13, 10))
+    plt.subplots_adjust(hspace=0.3, wspace=0.3) # Space for metrics and labels
 
     # Plot 1: Confusion Matrix
     axes[0, 0].set_title("Confusion Matrix")
-    ConfusionMatrixDisplay.from_predictions(y_true, y_poly_test['pred'], ax=axes[0, 0], cmap='Blues', colorbar=False)
+    ConfusionMatrixDisplay.from_predictions(y_true, y_test['pred'], ax=axes[0, 0], cmap='Blues', colorbar=False)
 
     # Metrics Text (Placed to the right of Confusion Matrix)
     metrics_text = (
-        f"--- Key Metrics ---\n"
-        f"Precision: {precision:0.3f}\n"
-        f"Recall:    {TPR:0.3f}\n"
-        f"TNR:       {TNR:0.3f}\n"
-        f"NPV:       {NPV:0.3f}"
+        fr" $\mathbf{{Threshold ({threshold})}}$" + "\n"
+        f"Precision: {precision:.3f}\n"
+        f"Recall:    {TPR:.3f}\n"
+        f"TNR:       {TNR:.3f}\n"
+        f"NPV:       {NPV:.3f}"
     )
     axes[0, 0].text(1.05, 0.5, metrics_text, transform=axes[0, 0].transAxes,
-                    fontsize=9, verticalalignment='center', family='monospace',
-                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+                    fontsize=8, verticalalignment='center', family='monospace',
+                    bbox=dict(boxstyle='round', facecolor='white'))
 
     # Plot 2: Counts vs Thresholds
-    tns, fps, fns, tps, thresholds_m = confusion_matrix_at_thresholds_f(y_true, y_prob)
+    tns, fps, fns, tps, thresholds_m = confusion_matrix_at_thresholds(y_true, y_prob)
     axes[0, 1].plot(thresholds_m, tns, label="TN")
     axes[0, 1].plot(thresholds_m, fps, label="FP")
     axes[0, 1].plot(thresholds_m, fns, label="FN")
     axes[0, 1].plot(thresholds_m, tps, label="TP")
-    axes[0, 1].set_title("Counts vs Thresholds")
+    axes[0, 1].set_title("TNs, FPs, FNs and TPs vs Thresholds")
     axes[0, 1].legend()
 
     # Plot 3: Precision-Recall vs Threshold
-    precisions, recalls, thresholds_pr = precision_recall_curve_f(y_true, y_prob)
+    precisions, recalls, thresholds_pr = precision_recall_curve(y_true, y_prob)
     axes[1, 0].plot(thresholds_pr, precisions[:-1], 'b--', label='Precision')
-    axes[1, 0].plot(thresholds_pr, recalls[:-1], 'g-', label='Recall')
+    axes[1, 0].plot(thresholds_pr, recalls[:-1], 'g--', label='Recall')
     axes[1, 0].set_title("Precision-Recall vs Threshold")
     axes[1, 0].legend()
 
     # Plot 4: ROC Curve
-    fpr, tpr, _ = roc_curve_f(y_true, y_prob)
-    auc_score = roc_auc_score_f(y_true, y_prob)
+    fpr, tpr, _ = roc_curve(y_true, y_prob)
+    auc_score = roc_auc_score(y_true, y_prob)
     axes[1, 1].plot(fpr, tpr)
     axes[1, 1].plot([0, 1], [0, 1], 'k--', label='Random Classifier')
     axes[1, 1].set_title(f"ROC Curve (AUC Score: {auc_score:0.3f})")
     axes[1, 1].legend()
 
-    fig.suptitle(title, fontsize=14)
+    fig.suptitle(title, fontsize=16)
     plt.show()
